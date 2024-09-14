@@ -317,7 +317,6 @@ def select_api_url():
         for i, url in enumerate(server_api_urls, 1):
             tprint(f"{i}. {url}", add_timestamp=False)
 
-        tprint("Press 'r' to return to this step at any time.", YELLOW)
         try:
             choice = input("Enter the number of the server you want to connect to: ")
 
@@ -341,6 +340,7 @@ def main():
     """
     global current_map
 
+    tprint("Press 'r' to return to the previous step at any time.", YELLOW)
     try:
         while True:
             api_url = select_api_url()
@@ -372,7 +372,7 @@ def select_server(servers):
     while True:
         try:
             tprint(
-                "Enter the number of the server you want to connect to (or 'r' to return): ",
+                "Enter the number of the server you want to connect to: ",
                 YELLOW,
                 end="",
             )
