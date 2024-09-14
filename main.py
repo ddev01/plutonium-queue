@@ -8,6 +8,11 @@ import datetime
 import winsound
 import sys
 
+server_api_urls = [
+    "https://hgmserve.rs/api/server",
+    "https://cod.gilletteclan.com/api/server",
+]
+
 CHECK_INTERVAL = 0.5
 
 # ANSI escape codes for colors
@@ -153,8 +158,6 @@ def capture_terminal_content():
                     time.sleep(CHECK_INTERVAL)
                     return "retry"
             time.sleep(1)
-    except KeyboardInterrupt:
-        tprint("🛑 Stopped reading terminal content.", RED)
     except Exception as e:
         tprint(f"❌ Error reading terminal content: {e}", RED)
 
@@ -241,17 +244,23 @@ def color_player_count(player_count, max_players):
 
 def select_api_url():
     """Prompt the user to select the API URL."""
-    print("Select the API URL:")
-    print("1. https://hgmserve.rs/api/server")
-    print("2. https://cod.gilletteclan.com/api/server")
-    choice = input("Enter the number of the API URL you want to use: ")
-    if choice == "1":
-        return "https://hgmserve.rs/api/server"
-    elif choice == "2":
-        return "https://cod.gilletteclan.com/api/server"
-    else:
-        print("Invalid choice. Defaulting to https://cod.gilletteclan.com/api/server")
-        return "https://cod.gilletteclan.com/api/server"
+    while True:
+        print("Select the API URL:")
+        for i, url in enumerate(server_api_urls, 1):
+            tprint(f"{i}. {url}", add_timestamp=False)
+
+        try:
+            choice = input("Enter the number of the server you want to connect to: ")
+
+            choice = int(choice)
+
+            if 1 <= choice <= len(server_api_urls):
+                return server_api_urls[choice - 1]
+            else:
+                tprint("❗ Invalid choice. Please enter a valid number.", RED)
+        except ValueError:
+            tprint("❗ Invalid input. Please enter a number.", RED)
+        print()
 
 
 def main():
@@ -284,11 +293,6 @@ def main():
                 tprint("❗ Invalid choice. Please enter a valid number.", RED)
         except ValueError:
             tprint("❗ Invalid input. Please enter a number.", RED)
-        except KeyboardInterrupt:
-            print()  # Add a newline before the CTRL+C message
-            tprint("🛑 CTRL+C detected. Exiting...", RED)
-            tprint("😊 Goodbye!", GREEN)
-            exit()
 
     # Clear the screen and move cursor to home position
     sys.stdout.write("\033[2J\033[H")
@@ -301,55 +305,47 @@ def main():
 
     last_status = None
 
-    try:
-        while True:
-            server_status = get_servers(api_url)
-            if server_status:
-                for server in server_status:
-                    if server["id"] == chosen_server["id"]:
-                        player_count = server["clientNum"]
-                        max_players = server["maxClients"]
-                        new_map = server["currentMap"]["name"]
-                        map_alias = server["currentMap"]["alias"]
+    while True:
+        server_status = get_servers(api_url)
+        if server_status:
+            for server in server_status:
+                if server["id"] == chosen_server["id"]:
+                    player_count = server["clientNum"]
+                    max_players = server["maxClients"]
+                    new_map = server["currentMap"]["name"]
+                    map_alias = server["currentMap"]["alias"]
 
-                        current_status = (
-                            f"{player_count}/{max_players} - {new_map} - {map_alias}"
-                        )
+                    current_status = (
+                        f"{player_count}/{max_players} - {new_map} - {map_alias}"
+                    )
 
-                        if new_map != current_map:
-                            current_map = new_map
-                            tprint(f"Map changed to: {new_map}", YELLOW)
+                    if new_map != current_map:
+                        current_map = new_map
+                        tprint(f"Map changed to: {new_map}", YELLOW)
 
-                        if player_count < max_players:
+                    if player_count < max_players:
+                        tprint("🎮 Slot available! Connecting to the server...", GREEN)
+                        connect_to_server(server)
+                        status = capture_terminal_content()
+                        if status == "connected":
                             tprint(
-                                "🎮 Slot available! Connecting to the server...", GREEN
+                                "✅ Successfully connected to the server. Exiting.",
+                                GREEN,
                             )
-                            connect_to_server(server)
-                            status = capture_terminal_content()
-                            if status == "connected":
-                                tprint(
-                                    "✅ Successfully connected to the server. Exiting.",
-                                    GREEN,
-                                )
-                                return
-                            elif status == "retry":
-                                continue
-                        else:
-                            if current_status != last_status:
-                                tprint(f"🔒 Server is full - [{current_status}]", RED)
-                                last_status = current_status
-                        break
-            else:
-                tprint("❌ Failed to fetch server status.", RED)
-            time.sleep(CHECK_INTERVAL)
-    except KeyboardInterrupt:
-        print("\n")  # Move to a new line
-        tprint("🛑 CTRL+C detected. Exiting...", RED)
-        tprint("😊 Goodbye!", GREEN)
-    finally:
-        sys.stdout.write("\033[?25h")  # Show cursor
-        sys.stdout.flush()
+                            return
+                        elif status == "retry":
+                            continue
+                    else:
+                        if current_status != last_status:
+                            tprint(f"🔒 Server is full - [{current_status}]", RED)
+                            last_status = current_status
+                    break
+        else:
+            tprint("❌ Failed to fetch server status.", RED)
+        time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
     main()
+    sys.stdout.write("\033[?25h")  # Show cursor
+    sys.stdout.flush()
