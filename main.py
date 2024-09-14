@@ -22,6 +22,7 @@ Dependencies:
 Usage:
 Run the script and follow the on-screen prompts to select a server API and choose a server to monitor.
 The script will continuously check the server status and attempt to connect when a slot is available.
+Press 'r' at any time to return to the previous step.
 """
 
 import re
@@ -33,6 +34,7 @@ from pywinauto import Application
 import datetime
 import winsound
 import sys
+import msvcrt
 
 # List of server API URLs to choose from
 server_api_urls = [
@@ -184,6 +186,11 @@ def capture_terminal_content():
     previous_content = terminal_control.window_text()
     try:
         while True:
+            if msvcrt.kbhit():
+                key = msvcrt.getch().decode("utf-8").lower()
+                if key == "r":
+                    return "return"
+
             current_content = terminal_control.window_text()
             if current_content != previous_content:
                 new_lines = current_content[len(previous_content) :]
@@ -310,8 +317,12 @@ def select_api_url():
         for i, url in enumerate(server_api_urls, 1):
             tprint(f"{i}. {url}", add_timestamp=False)
 
+        tprint("Press 'r' to return to this step at any time.", YELLOW)
         try:
             choice = input("Enter the number of the server you want to connect to: ")
+
+            if choice.lower() == "r":
+                return None
 
             choice = int(choice)
 
@@ -330,80 +341,118 @@ def main():
     """
     global current_map
 
-    api_url = select_api_url()
-    servers = get_servers(api_url)
-    if not servers:
-        tprint("❌ Failed to fetch server list. Exiting.", RED)
-        return
-    print_server_list(servers)
+    try:
+        while True:
+            api_url = select_api_url()
+            if api_url is None:
+                continue
 
-    chosen_server = None
-    while chosen_server is None:
+            servers = get_servers(api_url)
+            if not servers:
+                tprint("❌ Failed to fetch server list. Exiting.", RED)
+                return
+            print_server_list(servers)
+
+            chosen_server = select_server(servers)
+            if chosen_server is None:
+                continue
+
+            monitor_server(api_url, chosen_server)
+
+    except KeyboardInterrupt:
+        print("\n")
+        tprint("🛑 Operation cancelled by user. Exiting...", RED)
+        tprint("😊 Goodbye!", GREEN)
+    finally:
+        sys.stdout.write("\033[?25h")  # Show cursor
+        sys.stdout.flush()
+
+
+def select_server(servers):
+    while True:
         try:
             tprint(
-                "Enter the number of the server you want to connect to: ",
+                "Enter the number of the server you want to connect to (or 'r' to return): ",
                 YELLOW,
                 end="",
             )
-            choice = int(input())
+            choice = input().lower()
+            if choice == "r":
+                return None
+            choice = int(choice)
             if 1 <= choice <= len(servers):
-                chosen_server = servers[choice - 1]
-                player_count = chosen_server["clientNum"]
-                max_players = chosen_server["maxClients"]
-                map_name = chosen_server["currentMap"]["name"]
-                map_alias = chosen_server["currentMap"]["alias"]
-                current_map = map_name
+                return servers[choice - 1]
             else:
                 tprint("❗ Invalid choice. Please enter a valid number.", RED)
         except ValueError:
-            tprint("❗ Invalid input. Please enter a number.", RED)
+            if choice != "r":
+                tprint("❗ Invalid input. Please enter a number or 'r'.", RED)
+
+
+def monitor_server(api_url, chosen_server):
+    global current_map
+
+    player_count = chosen_server["clientNum"]
+    max_players = chosen_server["maxClients"]
+    map_name = chosen_server["currentMap"]["name"]
+    map_alias = chosen_server["currentMap"]["alias"]
+    current_map = map_name
 
     # Clear the screen and move cursor to home position
     sys.stdout.write("\033[2J\033[H")
     sys.stdout.flush()
 
     # Reprint the server list and selection
-    print_server_list(servers)
+    print_server_list([chosen_server])
     tprint(f"Selected server: {chosen_server['serverName']}", MAGENTA)
     tprint(f"[{player_count}/{max_players}] - {map_name} - {map_alias}", BLUE)
+    tprint("Press 'r' to return to server selection.", YELLOW)
 
     last_status = None
 
     while True:
+        if msvcrt.kbhit():
+            key = msvcrt.getch().decode("utf-8").lower()
+            if key == "r":
+                return
+
         server_status = get_servers(api_url)
         if server_status:
-            for server in server_status:
-                if server["id"] == chosen_server["id"]:
-                    player_count = server["clientNum"]
-                    max_players = server["maxClients"]
-                    new_map = server["currentMap"]["name"]
-                    map_alias = server["currentMap"]["alias"]
+            server = next(
+                (s for s in server_status if s["id"] == chosen_server["id"]), None
+            )
+            if server:
+                player_count = server["clientNum"]
+                max_players = server["maxClients"]
+                new_map = server["currentMap"]["name"]
+                map_alias = server["currentMap"]["alias"]
 
-                    current_status = (
-                        f"{player_count}/{max_players} - {new_map} - {map_alias}"
-                    )
+                current_status = (
+                    f"{player_count}/{max_players} - {new_map} - {map_alias}"
+                )
 
-                    if new_map != current_map:
-                        current_map = new_map
-                        tprint(f"Map changed to: {new_map}", YELLOW)
+                if new_map != current_map:
+                    current_map = new_map
+                    tprint(f"Map changed to: {new_map}", YELLOW)
 
-                    if player_count < max_players:
-                        tprint("🎮 Slot available! Connecting to the server...", GREEN)
-                        connect_to_server(server)
-                        status = capture_terminal_content()
-                        if status == "connected":
-                            tprint(
-                                "✅ Successfully connected to the server. Exiting.",
-                                GREEN,
-                            )
-                            return
-                        elif status == "retry":
-                            continue
-                    else:
-                        if current_status != last_status:
-                            tprint(f"🔒 Server is full - [{current_status}]", RED)
-                            last_status = current_status
-                    break
+                if player_count < max_players:
+                    tprint("🎮 Slot available! Connecting to the server...", GREEN)
+                    connect_to_server(server)
+                    status = capture_terminal_content()
+                    if status == "connected":
+                        tprint(
+                            "✅ Successfully connected to the server. Exiting.", GREEN
+                        )
+                        return
+                    elif status == "retry":
+                        continue
+                    elif status == "return":
+                        return
+                elif current_status != last_status:
+                    tprint(f"🔒 Server is full - [{current_status}]", RED)
+                    last_status = current_status
+            else:
+                tprint("❌ Chosen server not found in status update.", RED)
         else:
             tprint("❌ Failed to fetch server status.", RED)
         time.sleep(CHECK_INTERVAL)
@@ -411,5 +460,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    sys.stdout.write("\033[?25h")  # Show cursor
-    sys.stdout.flush()
