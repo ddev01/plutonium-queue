@@ -11,46 +11,6 @@ import sys
 
 CHECK_INTERVAL = 0.5
 
-STANDARD_MAPS = [
-    "mp_seatown",
-    "mp_dome",
-    "mp_arkaden",
-    "mp_bakaara",
-    "mp_resistance",
-    "mp_downturn",
-    "mp_bootleg",
-    "mp_carbon",
-    "mp_hardhat",
-    "mp_lockdown",
-    "mp_village",
-    "mp_fallen",
-    "mp_outpost",
-    "mp_interchange",
-    "mp_underground",
-    "mp_mission",
-    "mp_park",
-    "mp_italy",
-    "mp_overwatch",
-    "mp_morningwood",
-    "mp_sanctuary",
-    "mp_foundation",
-    "mp_oasis",
-    "mp_getaway",
-    "mp_lookout",
-    "mp_intersection",
-    "mp_uturn",
-    "mp_vortex",
-    "mp_decommission",
-    "mp_offshore",
-    "mp_gulch",
-    "mp_boardwalk",
-    "mp_parish",
-]
-
-current_map = None
-map_change_time = None
-
-
 # ANSI escape codes for colors
 COLOR_MAP = {
     "^0": "\033[30m",  # Black
@@ -70,6 +30,8 @@ RED = "\033[31m"
 MAGENTA = "\033[35m"
 BLUE = "\033[34m"
 RESET_COLOR = "\033[0m"
+
+current_map = None
 
 
 def play_sound(sound_name="Ring08"):
@@ -292,6 +254,7 @@ def select_api_url():
         print("Invalid choice. Defaulting to https://cod.gilletteclan.com/api/server")
         return "https://cod.gilletteclan.com/api/server"
 
+
 def get_servers(api_url):
     """Fetch the server list from the API and filter for IW5 games."""
     try:
@@ -305,7 +268,7 @@ def get_servers(api_url):
 
 
 def main():
-    global current_map, map_change_time
+    global current_map
 
     api_url = select_api_url()
     servers = get_servers(api_url)
@@ -330,7 +293,6 @@ def main():
                 map_name = chosen_server["currentMap"]["name"]
                 map_alias = chosen_server["currentMap"]["alias"]
                 current_map = map_name
-                map_change_time = None
             else:
                 tprint("❗ Invalid choice. Please enter a valid number.", RED)
         except ValueError:
@@ -354,7 +316,7 @@ def main():
 
     try:
         while True:
-            server_status = get_servers(api_url)  # Update this line
+            server_status = get_servers(api_url)
             if server_status:
                 for server in server_status:
                     if server["id"] == chosen_server["id"]:
@@ -368,37 +330,10 @@ def main():
                         )
 
                         if new_map != current_map:
-                            if new_map not in STANDARD_MAPS:
-                                if current_map in STANDARD_MAPS or (
-                                    current_map not in STANDARD_MAPS
-                                    and map_change_time is None
-                                ):
-                                    map_change_time = datetime.datetime.now()
-                                elif (
-                                    datetime.datetime.now() - map_change_time
-                                ).total_seconds() >= 60:
-                                    current_map = new_map
-                                    map_change_time = None
-                            else:
-                                current_map = new_map
-                                map_change_time = None
+                            current_map = new_map
+                            tprint(f"Map changed to: {new_map}", YELLOW)
 
                         if player_count < max_players:
-                            show_warning = (
-                                current_map not in STANDARD_MAPS
-                                and map_change_time is not None
-                                and (
-                                    datetime.datetime.now() - map_change_time
-                                ).total_seconds()
-                                < 60
-                            )
-
-                            if show_warning:
-                                tprint(
-                                    "⚠️  Warning: Server is on a custom map. Player count may be inaccurate.",
-                                    YELLOW,
-                                )
-
                             tprint(
                                 "🎮 Slot available! Connecting to the server...", GREEN
                             )
@@ -421,8 +356,6 @@ def main():
                 tprint("❌ Failed to fetch server status.", RED)
             time.sleep(CHECK_INTERVAL)
     except KeyboardInterrupt:
-        stop_animation.set()
-        animation_thread.join()
         print("\n")  # Move to a new line
         tprint("🛑 CTRL+C detected. Exiting...", RED)
         tprint("😊 Goodbye!", GREEN)
