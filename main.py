@@ -5,7 +5,6 @@ import pyautogui
 import pygetwindow as gw
 from pywinauto import Application
 import datetime
-import os
 import winsound
 import sys
 
@@ -42,11 +41,12 @@ def play_sound(sound_name="Ring08"):
 
 
 def get_servers(api_url):
-    """Fetch the server list from the API."""
+    """Fetch the server list from the API and filter for IW5 games."""
     try:
         response = requests.get(api_url)
         response.raise_for_status()
-        return response.json()
+        servers = response.json()
+        return [server for server in servers if server["game"] == "IW5"]
     except requests.RequestException as e:
         tprint(f"Error fetching server status: {e}")
     return None
@@ -73,7 +73,6 @@ def open_console():
             app = Application(backend="uia").connect(handle=console._hWnd)
             dlg = app.window(handle=console._hWnd)
             dlg.set_focus()
-            # console.maximize()
         else:
             tprint(f"No '{console_title}' (console) found")
             input("Open the console and press enter to continue...")
@@ -253,18 +252,6 @@ def select_api_url():
     else:
         print("Invalid choice. Defaulting to https://cod.gilletteclan.com/api/server")
         return "https://cod.gilletteclan.com/api/server"
-
-
-def get_servers(api_url):
-    """Fetch the server list from the API and filter for IW5 games."""
-    try:
-        response = requests.get(api_url)
-        response.raise_for_status()
-        servers = response.json()
-        return [server for server in servers if server["game"] == "IW5"]
-    except requests.RequestException as e:
-        tprint(f"Error fetching server status: {e}")
-    return None
 
 
 def main():
