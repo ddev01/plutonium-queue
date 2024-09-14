@@ -1,3 +1,29 @@
+"""
+Plutonium Server Monitor and Auto-Connector
+
+This script monitors Plutonium servers for IW5 (Call of Duty: Modern Warfare 3) and automatically
+connects to a chosen server when a slot becomes available. It provides a user-friendly interface
+for selecting servers, displays real-time server information, and handles the connection process.
+
+Key Features:
+- Fetches server information from multiple API endpoints
+- Displays a colored and formatted list of available servers
+- Monitors server status and player counts in real-time
+- Automatically connects to the chosen server when a slot is available
+- Provides visual and audio feedback on connection status
+
+Dependencies:
+- requests: For making HTTP requests to the server API
+- pyautogui: For simulating keyboard input
+- pygetwindow: For window management
+- pywinauto: For interacting with Windows applications
+- winsound: For playing sound notifications
+
+Usage:
+Run the script and follow the on-screen prompts to select a server API and choose a server to monitor.
+The script will continuously check the server status and attempt to connect when a slot is available.
+"""
+
 import re
 import requests
 import time
@@ -8,14 +34,16 @@ import datetime
 import winsound
 import sys
 
+# List of server API URLs to choose from
 server_api_urls = [
     "https://hgmserve.rs/api/server",
     "https://cod.gilletteclan.com/api/server",
 ]
 
+# Interval (in seconds) between server status checks
 CHECK_INTERVAL = 0.5
 
-# ANSI escape codes for colors
+# ANSI escape codes for text colors
 COLOR_MAP = {
     "^0": "\033[30m",  # Black
     "^1": "\033[31m",  # Red
@@ -27,6 +55,7 @@ COLOR_MAP = {
     "^7": "\033[37m",  # White
 }
 
+# Predefined color constants for easier use
 CYAN = "\033[36m"
 YELLOW = "\033[33m"
 GREEN = "\033[32m"
@@ -35,10 +64,14 @@ MAGENTA = "\033[35m"
 BLUE = "\033[34m"
 RESET_COLOR = "\033[0m"
 
+# Global variable to track the current map
 current_map = None
 
 
 def play_sound(sound_name="Ring08"):
+    """
+    Play a system sound for notifications.
+    """
     try:
         winsound.PlaySound(r"C:\Windows\Media\Ring08.wav", winsound.SND_FILENAME)
     except:
@@ -46,7 +79,9 @@ def play_sound(sound_name="Ring08"):
 
 
 def get_servers(api_url):
-    """Fetch the server list from the API and filter for IW5 games."""
+    """
+    Fetch the server list from the API and filter for IW5 games.
+    """
     try:
         response = requests.get(api_url)
         response.raise_for_status()
@@ -58,7 +93,9 @@ def get_servers(api_url):
 
 
 def find_plutonium_window():
-    """Find the Plutonium window with a title matching 'Plutonium r[any 4 numbers]'."""
+    """
+    Find the Plutonium window with a title matching 'Plutonium r[any 4 numbers]'.
+    """
     windows = gw.getAllTitles()
     for title in windows:
         if re.match(r"Plutonium r\d{4}", title):
@@ -67,7 +104,9 @@ def find_plutonium_window():
 
 
 def open_console():
-    """Open and activate the Plutonium console window."""
+    """
+    Open and activate the Plutonium console window.
+    """
     console_title = find_plutonium_window()
     if console_title:
         console_list = gw.getWindowsWithTitle(console_title)
@@ -89,7 +128,9 @@ def open_console():
 
 
 def connect_to_server(server):
-    """Connect to the server using the Plutonium console."""
+    """
+    Connect to the server using the Plutonium console.
+    """
     open_console()
     time.sleep(0.1)
     pyautogui.typewrite(f"connect {server['listenAddress']}:{server['listenPort']}")
@@ -97,7 +138,9 @@ def connect_to_server(server):
 
 
 def find_terminal_control(dlg):
-    """Find the control containing the terminal content."""
+    """
+    Find the control containing the terminal content.
+    """
     for control in dlg.descendants():
         try:
             control_text = control.window_text()
@@ -112,7 +155,9 @@ def find_terminal_control(dlg):
 
 
 def find_game_window():
-    """Find the Plutonium IW5: Multiplayer window."""
+    """
+    Find the Plutonium IW5: Multiplayer window.
+    """
     windows = gw.getAllTitles()
     for title in windows:
         if "Plutonium IW5: Multiplayer" in title:
@@ -121,7 +166,9 @@ def find_game_window():
 
 
 def capture_terminal_content():
-    """Capture and monitor the terminal content for specific messages."""
+    """
+    Capture and monitor the terminal content for specific messages.
+    """
     console_title = find_plutonium_window()
     if not console_title:
         raise Exception("Plutonium console window not found")
@@ -163,7 +210,9 @@ def capture_terminal_content():
 
 
 def print_server_list(servers):
-    """Print the list of servers with their names colored and additional information aligned."""
+    """
+    Print the list of servers with their names colored and additional information aligned.
+    """
     tprint("Available servers:", BLUE)
     max_name_length = max(
         len(strip_color_codes(server["serverName"])) for server in servers
@@ -191,14 +240,18 @@ def print_server_list(servers):
 
 
 def format_colored_text(text, max_length):
-    """Format colored text to a specific length."""
+    """
+    Format colored text to a specific length.
+    """
     stripped = strip_color_codes(text)
     padding = max_length - len(stripped)
     return text + (" " * padding)
 
 
 def tprint(text, color=RESET_COLOR, end="\n", add_timestamp=True):
-    """Print text with time prefix, color support, and emojis."""
+    """
+    Print text with time prefix, color support, and emojis.
+    """
     if add_timestamp:
         now = datetime.datetime.now()
         current_time = now.strftime("[%H:%M:%S.") + f"{now.microsecond // 1000:03d}] "
@@ -208,7 +261,9 @@ def tprint(text, color=RESET_COLOR, end="\n", add_timestamp=True):
 
 
 def print_colored_text(text):
-    """Print text with color codes."""
+    """
+    Print text with color codes.
+    """
     parts = re.split(r"(\^[0-7])", text)
     current_color = RESET_COLOR
     for part in parts:
@@ -220,12 +275,16 @@ def print_colored_text(text):
 
 
 def strip_color_codes(text):
-    """Remove color codes from text for length calculation."""
+    """
+    Remove color codes from text for length calculation.
+    """
     return re.sub(r"\^[0-7]", "", text)
 
 
 def color_player_count(player_count, max_players):
-    """Color the player count based on the number of players."""
+    """
+    Color the player count based on the number of players.
+    """
     if player_count == max_players:
         color = COLOR_MAP["^1"]  # Red for full server
     elif player_count >= max_players - 2:
@@ -243,7 +302,9 @@ def color_player_count(player_count, max_players):
 
 
 def select_api_url():
-    """Prompt the user to select the API URL."""
+    """
+    Prompt the user to select the API URL.
+    """
     while True:
         print("Select the API URL:")
         for i, url in enumerate(server_api_urls, 1):
@@ -264,6 +325,9 @@ def select_api_url():
 
 
 def main():
+    """
+    Main function to run the Plutonium Server Monitor and Auto-Connector.
+    """
     global current_map
 
     api_url = select_api_url()
