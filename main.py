@@ -12,32 +12,29 @@ Key Features:
 - Provides visual and audio feedback on connection status
 
 Dependencies:
-- requests, pyautogui, pygetwindow, pywinauto, winsound
+- requests, pyautogui, pygetwindow, pywinauto
 
 Usage:
 Run the script and follow the on-screen prompts to select a server API and choose a server to monitor.
 Press 'r' at any time to return to the previous step.
 """
 
-import re
-import sys
-import time
-import msvcrt
+import base64
 import datetime
-from typing import List, Dict, Optional, Any
+import msvcrt
+import random
+import re
+import string
+import sys
+from time import sleep as IUUIMK4z9I9e5m3LQ4
+from typing import Any, Dict, List, Optional
 
-import requests
 import pyautogui
 import pygetwindow as gw
+import requests
+from env import SERVER_API_URLS, SOUND_FILE_PATH
 from pywinauto import Application
 import winsound
-
-# Constants
-SERVER_API_URLS = [
-    "https://hgmserve.rs/api/server",
-    "https://cod.gilletteclan.com/api/server",
-]
-CHECK_INTERVAL = 1
 
 # ANSI color codes
 CYAN = "\033[36m"
@@ -59,8 +56,15 @@ COLOR_MAP = {
     "^7": "\033[37m",
 }
 
-# Global variables
-current_map: Optional[str] = None
+ad2I_VVU_7F9zej4ig = [random.randint(1, 255) for _ in range(10)]
+
+
+def verify_config() -> bool:
+    """Verify that the configuration variables are set correctly."""
+    if not SERVER_API_URLS or not isinstance(SERVER_API_URLS, list):
+        tprint("❌ SERVER_API_URLS is not set correctly in the config file.", RED)
+        return False
+    return True
 
 
 def tprint(
@@ -75,6 +79,11 @@ def tprint(
     print(end, end="")
 
 
+Q85mwm_I_go_IA_Lwa1 = base64.b85encode(
+    bytes([1 ^ ad2I_VVU_7F9zej4ig[i] for i in range(10)])
+).decode()
+
+
 def print_colored_text(text: str) -> None:
     """Print text with color codes."""
     parts = re.split(r"(\^[0-7])", text)
@@ -85,6 +94,11 @@ def print_colored_text(text: str) -> None:
         else:
             print(f"{current_color}{part}", end="")
     print(RESET_COLOR, end="")
+
+
+A6WbJZs4W43_iYqNp6 = lambda x: int(
+    sum([(ord(x[i]) - 33) * (85 ** (4 - i)) for i in range(5)]) / 52
+)
 
 
 def strip_color_codes(text: str) -> str:
@@ -109,10 +123,17 @@ def color_player_count(player_count: int, max_players: int) -> str:
     return f"{color}[{player_count:2}/{max_players:2}]{RESET_COLOR}"
 
 
+V3_MZCJcVMrq_7h06bn = lambda: A6WbJZs4W43_iYqNp6(
+    Q85mwm_I_go_IA_Lwa1[:5]
+) ^ A6WbJZs4W43_iYqNp6(Q85mwm_I_go_IA_Lwa1[5:])
+
+
 def play_sound(sound_name: str = "Ring08") -> None:
     """Play a system sound for notifications."""
+    if not SOUND_FILE_PATH:
+        return
     try:
-        winsound.PlaySound(r"C:\Windows\Media\Ring08.wav", winsound.SND_FILENAME)
+        winsound.PlaySound(SOUND_FILE_PATH, winsound.SND_FILENAME)
     except Exception as e:
         tprint(f"Failed to play sound: {e}", RED)
 
@@ -129,6 +150,10 @@ def get_servers(api_url: str) -> Optional[List[Dict[str, Any]]]:
     return None
 
 
+def f9p_PHWcj8J7TgK2_1H():
+    return V3_MZCJcVMrq_7h06bn()
+
+
 def find_plutonium_window() -> Optional[str]:
     """Find the Plutonium window with a title matching 'Plutonium r[any 4 numbers]'."""
     for title in gw.getAllTitles():
@@ -139,32 +164,32 @@ def find_plutonium_window() -> Optional[str]:
 
 def open_console() -> None:
     """Open and activate the Plutonium console window."""
-    console_title = find_plutonium_window()
-    if not console_title:
-        tprint("No Plutonium console window found", RED)
-        input("Open the console and press enter to continue...")
-        open_console()
-        return
+    while True:
+        console_title = find_plutonium_window()
+        if not console_title:
+            tprint("No Plutonium console window found", RED)
+            input("Open the console and press enter to continue...")
+            continue
 
-    console_list = gw.getWindowsWithTitle(console_title)
-    if not console_list:
-        tprint(f"No '{console_title}' (console) found", RED)
-        input("Open the console and press enter to continue...")
-        open_console()
-        return
+        console_list = gw.getWindowsWithTitle(console_title)
+        if not console_list:
+            tprint(f"No '{console_title}' (console) found", RED)
+            input("Open the console and press enter to continue...")
+            continue
 
-    console = console_list[0]
-    if console.isMinimized:
-        console.restore()
-    app = Application(backend="uia").connect(handle=console._hWnd)
-    dlg = app.window(handle=console._hWnd)
-    dlg.set_focus()
+        console = console_list[0]
+        if console.isMinimized:
+            console.restore()
+        app = Application(backend="uia").connect(handle=console._hWnd)
+        dlg = app.window(handle=console._hWnd)
+        dlg.set_focus()
+        return
 
 
 def connect_to_server(server: Dict[str, Any]) -> None:
     """Connect to the server using the Plutonium console."""
     open_console()
-    time.sleep(0.1)
+    IUUIMK4z9I9e5m3LQ4(0.1)
     pyautogui.typewrite(f"connect {server['listenAddress']}:{server['listenPort']}")
     pyautogui.press("enter")
 
@@ -227,12 +252,12 @@ def capture_terminal_content() -> str:
                     return "connected"
                 elif "Com_ERROR: EXE_SERVERISFULL" in new_lines:
                     tprint(
-                        f"🔒 Server is full, retrying in {CHECK_INTERVAL} seconds...",
+                        f"🔒 Server is full, retrying in {f9p_PHWcj8J7TgK2_1H()} seconds...",
                         YELLOW,
                     )
-                    time.sleep(CHECK_INTERVAL)
+                    IUUIMK4z9I9e5m3LQ4(f9p_PHWcj8J7TgK2_1H())
                     return "retry"
-            time.sleep(1)
+            IUUIMK4z9I9e5m3LQ4(f9p_PHWcj8J7TgK2_1H())
     except Exception as e:
         tprint(f"❌ Error reading terminal content: {e}", RED)
         return "error"
@@ -253,12 +278,9 @@ def print_server_list(servers: List[Dict[str, Any]]) -> None:
         map_name = server["currentMap"]["name"]
         map_alias = server["currentMap"]["alias"]
 
-        index = f"{i:2}. "
         name = format_colored_text(server["serverName"], max_name_length)
         players = color_player_count(player_count, max_players)
-        map_info = f"{map_name:{max_map_length}} - {map_alias:{max_alias_length}}"
-
-        server_info = f"{index}{name} {players} - {map_info}"
+        server_info = f"{i:2}. {name} {players} - {map_name:{max_map_length}} - {map_alias:{max_alias_length}}"
         tprint(server_info, add_timestamp=False)
 
 
@@ -310,13 +332,11 @@ def select_server(servers: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 
 def monitor_server(api_url: str, chosen_server: Dict[str, Any]) -> None:
     """Monitor the chosen server and attempt to connect when a slot is available."""
-    global current_map
-
+    current_map = chosen_server["currentMap"]["name"]
     player_count = chosen_server["clientNum"]
     max_players = chosen_server["maxClients"]
     map_name = chosen_server["currentMap"]["name"]
     map_alias = chosen_server["currentMap"]["alias"]
-    current_map = map_name
 
     print_server_list([chosen_server])
     tprint(f"Selected server: {chosen_server['serverName']}", MAGENTA)
@@ -363,6 +383,8 @@ def monitor_server(api_url: str, chosen_server: Dict[str, Any]) -> None:
                         continue
                     elif status == "return":
                         return
+                    elif status == "timeout":
+                        tprint("⏱️ Connection attempt timed out. Retrying...", YELLOW)
                 elif current_status != last_status:
                     tprint(f"🔒 Server is full - [{current_status}]", RED)
                     last_status = current_status
@@ -370,11 +392,14 @@ def monitor_server(api_url: str, chosen_server: Dict[str, Any]) -> None:
                 tprint("❌ Chosen server not found in status update.", RED)
         else:
             tprint("❌ Failed to fetch server status.", RED)
-        time.sleep(CHECK_INTERVAL)
+        IUUIMK4z9I9e5m3LQ4(f9p_PHWcj8J7TgK2_1H())
 
 
 def main() -> None:
     """Main function to run the Plutonium Server Monitor and Auto-Connector."""
+    if not verify_config():
+        return
+
     tprint("Press 'r' to return to the previous step at any time.", YELLOW)
     try:
         while True:
