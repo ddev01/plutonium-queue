@@ -2,8 +2,7 @@
 Plutonium Server Monitor and Auto-Connector
 
 This script monitors Plutonium servers for IW5 (Call of Duty: Modern Warfare 3) and automatically
-connects to a chosen server when a slot becomes available. It provides a user-friendly interface
-for selecting servers, displays real-time server information, and handles the connection process.
+connects to a chosen server when a slot becomes available.
 
 Key Features:
 - Fetches server information from multiple API endpoints
@@ -13,51 +12,34 @@ Key Features:
 - Provides visual and audio feedback on connection status
 
 Dependencies:
-- requests: For making HTTP requests to the server API
-- pyautogui: For simulating keyboard input
-- pygetwindow: For window management
-- pywinauto: For interacting with Windows applications
-- winsound: For playing sound notifications
+- requests, pyautogui, pygetwindow, pywinauto, winsound
 
 Usage:
 Run the script and follow the on-screen prompts to select a server API and choose a server to monitor.
-The script will continuously check the server status and attempt to connect when a slot is available.
 Press 'r' at any time to return to the previous step.
 """
 
 import re
-import requests
+import sys
 import time
+import msvcrt
+import datetime
+from typing import List, Dict, Optional, Any
+
+import requests
 import pyautogui
 import pygetwindow as gw
 from pywinauto import Application
-import datetime
 import winsound
-import sys
-import msvcrt
 
-# List of server API URLs to choose from
-server_api_urls = [
+# Constants
+SERVER_API_URLS = [
     "https://hgmserve.rs/api/server",
     "https://cod.gilletteclan.com/api/server",
 ]
+CHECK_INTERVAL = 1
 
-# Interval (in seconds) between server status checks
-CHECK_INTERVAL = 0.5
-
-# ANSI escape codes for text colors
-COLOR_MAP = {
-    "^0": "\033[30m",  # Black
-    "^1": "\033[31m",  # Red
-    "^2": "\033[32m",  # Green
-    "^3": "\033[33m",  # Yellow
-    "^4": "\033[34m",  # Blue
-    "^5": "\033[36m",  # Cyan (Light Blue)
-    "^6": "\033[35m",  # Magenta (Pink)
-    "^7": "\033[37m",  # White
-}
-
-# Predefined color constants for easier use
+# ANSI color codes
 CYAN = "\033[36m"
 YELLOW = "\033[33m"
 GREEN = "\033[32m"
@@ -66,111 +48,151 @@ MAGENTA = "\033[35m"
 BLUE = "\033[34m"
 RESET_COLOR = "\033[0m"
 
-# Global variable to track the current map
-current_map = None
+COLOR_MAP = {
+    "^0": "\033[30m",
+    "^1": "\033[31m",
+    "^2": "\033[32m",
+    "^3": "\033[33m",
+    "^4": "\033[34m",
+    "^5": "\033[36m",
+    "^6": "\033[35m",
+    "^7": "\033[37m",
+}
+
+# Global variables
+current_map: Optional[str] = None
 
 
-def play_sound(sound_name="Ring08"):
-    """
-    Play a system sound for notifications.
-    """
+def tprint(
+    text: str, color: str = RESET_COLOR, end: str = "\n", add_timestamp: bool = True
+) -> None:
+    """Print text with time prefix, color support, and emojis."""
+    if add_timestamp:
+        now = datetime.datetime.now()
+        current_time = now.strftime("[%H:%M:%S.") + f"{now.microsecond // 1000:03d}] "
+        print(f"{CYAN}{current_time}{RESET_COLOR}", end="")
+    print_colored_text(f"{color}{text}{RESET_COLOR}")
+    print(end, end="")
+
+
+def print_colored_text(text: str) -> None:
+    """Print text with color codes."""
+    parts = re.split(r"(\^[0-7])", text)
+    current_color = RESET_COLOR
+    for part in parts:
+        if part in COLOR_MAP:
+            current_color = COLOR_MAP[part]
+        else:
+            print(f"{current_color}{part}", end="")
+    print(RESET_COLOR, end="")
+
+
+def strip_color_codes(text: str) -> str:
+    """Remove color codes from text for length calculation."""
+    return re.sub(r"\^[0-7]", "", text)
+
+
+def color_player_count(player_count: int, max_players: int) -> str:
+    """Color the player count based on the number of players."""
+    if player_count == max_players:
+        color = COLOR_MAP["^1"]
+    elif player_count >= max_players - 2:
+        color = COLOR_MAP["^3"]
+    elif player_count >= max_players * 0.7:
+        color = COLOR_MAP["^2"]
+    elif player_count >= max_players * 0.4:
+        color = COLOR_MAP["^5"]
+    elif player_count > 0:
+        color = COLOR_MAP["^6"]
+    else:
+        color = COLOR_MAP["^7"]
+    return f"{color}[{player_count:2}/{max_players:2}]{RESET_COLOR}"
+
+
+def play_sound(sound_name: str = "Ring08") -> None:
+    """Play a system sound for notifications."""
     try:
         winsound.PlaySound(r"C:\Windows\Media\Ring08.wav", winsound.SND_FILENAME)
-    except:
-        pass
+    except Exception as e:
+        tprint(f"Failed to play sound: {e}", RED)
 
 
-def get_servers(api_url):
-    """
-    Fetch the server list from the API and filter for IW5 games.
-    """
+def get_servers(api_url: str) -> Optional[List[Dict[str, Any]]]:
+    """Fetch the server list from the API and filter for IW5 games."""
     try:
-        response = requests.get(api_url)
+        response = requests.get(api_url, timeout=10)
         response.raise_for_status()
         servers = response.json()
         return [server for server in servers if server["game"] == "IW5"]
     except requests.RequestException as e:
-        tprint(f"Error fetching server status: {e}")
+        tprint(f"Error fetching server status: {e}", RED)
     return None
 
 
-def find_plutonium_window():
-    """
-    Find the Plutonium window with a title matching 'Plutonium r[any 4 numbers]'.
-    """
-    windows = gw.getAllTitles()
-    for title in windows:
+def find_plutonium_window() -> Optional[str]:
+    """Find the Plutonium window with a title matching 'Plutonium r[any 4 numbers]'."""
+    for title in gw.getAllTitles():
         if re.match(r"Plutonium r\d{4}", title):
             return title
     return None
 
 
-def open_console():
-    """
-    Open and activate the Plutonium console window.
-    """
+def open_console() -> None:
+    """Open and activate the Plutonium console window."""
     console_title = find_plutonium_window()
-    if console_title:
-        console_list = gw.getWindowsWithTitle(console_title)
-        if console_list:
-            console = console_list[0]
-            if console.isMinimized:
-                console.restore()
-            app = Application(backend="uia").connect(handle=console._hWnd)
-            dlg = app.window(handle=console._hWnd)
-            dlg.set_focus()
-        else:
-            tprint(f"No '{console_title}' (console) found")
-            input("Open the console and press enter to continue...")
-            open_console()
-    else:
-        tprint("No Plutonium console window found")
+    if not console_title:
+        tprint("No Plutonium console window found", RED)
         input("Open the console and press enter to continue...")
         open_console()
+        return
+
+    console_list = gw.getWindowsWithTitle(console_title)
+    if not console_list:
+        tprint(f"No '{console_title}' (console) found", RED)
+        input("Open the console and press enter to continue...")
+        open_console()
+        return
+
+    console = console_list[0]
+    if console.isMinimized:
+        console.restore()
+    app = Application(backend="uia").connect(handle=console._hWnd)
+    dlg = app.window(handle=console._hWnd)
+    dlg.set_focus()
 
 
-def connect_to_server(server):
-    """
-    Connect to the server using the Plutonium console.
-    """
+def connect_to_server(server: Dict[str, Any]) -> None:
+    """Connect to the server using the Plutonium console."""
     open_console()
     time.sleep(0.1)
     pyautogui.typewrite(f"connect {server['listenAddress']}:{server['listenPort']}")
     pyautogui.press("enter")
 
 
-def find_terminal_control(dlg):
-    """
-    Find the control containing the terminal content.
-    """
+def find_terminal_control(dlg: Any) -> Optional[Any]:
+    """Find the control containing the terminal content."""
     for control in dlg.descendants():
         try:
-            control_text = control.window_text()
-            control_class = control.friendly_class_name()
-            if control_class == "Static" and control_text.startswith(
-                "----------------------"
+            if (
+                control.friendly_class_name() == "Static"
+                and control.window_text().startswith("----------------------")
             ):
                 return control
         except Exception as e:
-            tprint(f"Error accessing control properties: {e}")
+            tprint(f"Error accessing control properties: {e}", RED)
     return None
 
 
-def find_game_window():
-    """
-    Find the Plutonium IW5: Multiplayer window.
-    """
-    windows = gw.getAllTitles()
-    for title in windows:
+def find_game_window() -> Optional[str]:
+    """Find the Plutonium IW5: Multiplayer window."""
+    for title in gw.getAllTitles():
         if "Plutonium IW5: Multiplayer" in title:
             return title
     return None
 
 
-def capture_terminal_content():
-    """
-    Capture and monitor the terminal content for specific messages.
-    """
+def capture_terminal_content() -> str:
+    """Capture and monitor the terminal content for specific messages."""
     console_title = find_plutonium_window()
     if not console_title:
         raise Exception("Plutonium console window not found")
@@ -200,8 +222,7 @@ def capture_terminal_content():
                     tprint("✅ Successfully connected to the server!", GREEN)
                     game_window = find_game_window()
                     if game_window:
-                        game_window_obj = gw.getWindowsWithTitle(game_window)[0]
-                        game_window_obj.activate()
+                        gw.getWindowsWithTitle(game_window)[0].activate()
                     play_sound("Ring08")
                     return "connected"
                 elif "Com_ERROR: EXE_SERVERISFULL" in new_lines:
@@ -214,12 +235,11 @@ def capture_terminal_content():
             time.sleep(1)
     except Exception as e:
         tprint(f"❌ Error reading terminal content: {e}", RED)
+        return "error"
 
 
-def print_server_list(servers):
-    """
-    Print the list of servers with their names colored and additional information aligned.
-    """
+def print_server_list(servers: List[Dict[str, Any]]) -> None:
+    """Print the list of servers with their names colored and additional information aligned."""
     tprint("Available servers:", BLUE)
     max_name_length = max(
         len(strip_color_codes(server["serverName"])) for server in servers
@@ -233,163 +253,63 @@ def print_server_list(servers):
         map_name = server["currentMap"]["name"]
         map_alias = server["currentMap"]["alias"]
 
-        # Format each part separately
         index = f"{i:2}. "
         name = format_colored_text(server["serverName"], max_name_length)
         players = color_player_count(player_count, max_players)
         map_info = f"{map_name:{max_map_length}} - {map_alias:{max_alias_length}}"
 
-        # Combine all parts
         server_info = f"{index}{name} {players} - {map_info}"
-
-        # Print the formatted string
         tprint(server_info, add_timestamp=False)
 
 
-def format_colored_text(text, max_length):
-    """
-    Format colored text to a specific length.
-    """
+def format_colored_text(text: str, max_length: int) -> str:
+    """Format colored text to a specific length."""
     stripped = strip_color_codes(text)
     padding = max_length - len(stripped)
     return text + (" " * padding)
 
 
-def tprint(text, color=RESET_COLOR, end="\n", add_timestamp=True):
-    """
-    Print text with time prefix, color support, and emojis.
-    """
-    if add_timestamp:
-        now = datetime.datetime.now()
-        current_time = now.strftime("[%H:%M:%S.") + f"{now.microsecond // 1000:03d}] "
-        print(f"{CYAN}{current_time}{RESET_COLOR}", end="")
-    print_colored_text(f"{color}{text}{RESET_COLOR}")
-    print(end, end="")
-
-
-def print_colored_text(text):
-    """
-    Print text with color codes.
-    """
-    parts = re.split(r"(\^[0-7])", text)
-    current_color = RESET_COLOR
-    for part in parts:
-        if part in COLOR_MAP:
-            current_color = COLOR_MAP[part]
-        else:
-            print(f"{current_color}{part}", end="")
-    print(RESET_COLOR, end="")
-
-
-def strip_color_codes(text):
-    """
-    Remove color codes from text for length calculation.
-    """
-    return re.sub(r"\^[0-7]", "", text)
-
-
-def color_player_count(player_count, max_players):
-    """
-    Color the player count based on the number of players.
-    """
-    if player_count == max_players:
-        color = COLOR_MAP["^1"]  # Red for full server
-    elif player_count >= max_players - 2:
-        color = COLOR_MAP["^3"]  # Yellow for nearly full (1-2 spots open)
-    elif player_count >= max_players * 0.7:  # 13+ players in an 18-player server
-        color = COLOR_MAP["^2"]  # Green for high player count (exciting games)
-    elif player_count >= max_players * 0.4:  # 8-12 players in an 18-player server
-        color = COLOR_MAP["^5"]  # Cyan for medium player count (decent games)
-    elif player_count > 0:
-        color = COLOR_MAP["^6"]  # Magenta for low player count (not very exciting)
-    else:
-        color = COLOR_MAP["^7"]  # White for empty server
-
-    return f"{color}[{player_count:2}/{max_players:2}]{RESET_COLOR}"
-
-
-def select_api_url():
-    """
-    Prompt the user to select the API URL.
-    """
+def select_api_url() -> Optional[str]:
+    """Prompt the user to select the API URL."""
     while True:
         print("Select the API URL:")
-        for i, url in enumerate(server_api_urls, 1):
+        for i, url in enumerate(SERVER_API_URLS, 1):
             tprint(f"{i}. {url}", add_timestamp=False)
 
+        choice = input("Enter the number of the server API you want to use: ").lower()
+        if choice == "r":
+            return None
         try:
-            choice = input("Enter the number of the server you want to connect to: ")
-
-            if choice.lower() == "r":
-                return None
-
             choice = int(choice)
-
-            if 1 <= choice <= len(server_api_urls):
-                return server_api_urls[choice - 1]
-            else:
-                tprint("❗ Invalid choice. Please enter a valid number.", RED)
+            if 1 <= choice <= len(SERVER_API_URLS):
+                return SERVER_API_URLS[choice - 1]
+            tprint("❗ Invalid choice. Please enter a valid number.", RED)
         except ValueError:
             tprint("❗ Invalid input. Please enter a number.", RED)
         print()
 
 
-def main():
-    """
-    Main function to run the Plutonium Server Monitor and Auto-Connector.
-    """
-    global current_map
-
-    tprint("Press 'r' to return to the previous step at any time.", YELLOW)
-    try:
-        while True:
-            api_url = select_api_url()
-            if api_url is None:
-                continue
-
-            servers = get_servers(api_url)
-            if not servers:
-                tprint("❌ Failed to fetch server list. Exiting.", RED)
-                return
-            print_server_list(servers)
-
-            chosen_server = select_server(servers)
-            if chosen_server is None:
-                continue
-
-            monitor_server(api_url, chosen_server)
-
-    except KeyboardInterrupt:
-        print("\n")
-        tprint("🛑 Operation cancelled by user. Exiting...", RED)
-        tprint("😊 Goodbye!", GREEN)
-    finally:
-        sys.stdout.write("\033[?25h")  # Show cursor
-        sys.stdout.flush()
-
-
-def select_server(servers):
+def select_server(servers: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Prompt the user to select a server from the list."""
     while True:
+        tprint(
+            "Enter the number of the server you want to connect to: ", YELLOW, end=""
+        )
+        choice = input().lower()
+        if choice == "r":
+            return None
         try:
-            tprint(
-                "Enter the number of the server you want to connect to: ",
-                YELLOW,
-                end="",
-            )
-            choice = input().lower()
-            if choice == "r":
-                return None
             choice = int(choice)
             if 1 <= choice <= len(servers):
                 return servers[choice - 1]
-            else:
-                tprint("❗ Invalid choice. Please enter a valid number.", RED)
+            tprint("❗ Invalid choice. Please enter a valid number.", RED)
         except ValueError:
             if choice != "r":
                 tprint("❗ Invalid input. Please enter a number or 'r'.", RED)
 
 
-def monitor_server(api_url, chosen_server):
+def monitor_server(api_url: str, chosen_server: Dict[str, Any]) -> None:
+    """Monitor the chosen server and attempt to connect when a slot is available."""
     global current_map
 
     player_count = chosen_server["clientNum"]
@@ -398,11 +318,6 @@ def monitor_server(api_url, chosen_server):
     map_alias = chosen_server["currentMap"]["alias"]
     current_map = map_name
 
-    # Clear the screen and move cursor to home position
-    sys.stdout.write("\033[2J\033[H")
-    sys.stdout.flush()
-
-    # Reprint the server list and selection
     print_server_list([chosen_server])
     tprint(f"Selected server: {chosen_server['serverName']}", MAGENTA)
     tprint(f"[{player_count}/{max_players}] - {map_name} - {map_alias}", BLUE)
@@ -456,6 +371,36 @@ def monitor_server(api_url, chosen_server):
         else:
             tprint("❌ Failed to fetch server status.", RED)
         time.sleep(CHECK_INTERVAL)
+
+
+def main() -> None:
+    """Main function to run the Plutonium Server Monitor and Auto-Connector."""
+    tprint("Press 'r' to return to the previous step at any time.", YELLOW)
+    try:
+        while True:
+            api_url = select_api_url()
+            if api_url is None:
+                continue
+
+            servers = get_servers(api_url)
+            if not servers:
+                tprint("❌ Failed to fetch server list. Exiting.", RED)
+                return
+            print_server_list(servers)
+
+            chosen_server = select_server(servers)
+            if chosen_server is None:
+                continue
+
+            monitor_server(api_url, chosen_server)
+
+    except KeyboardInterrupt:
+        print("\n")
+        tprint("🛑 Operation cancelled by user. Exiting...", RED)
+    except Exception as e:
+        tprint(f"An unexpected error occurred: {e}", RED)
+    finally:
+        tprint("😊 Goodbye!", GREEN)
 
 
 if __name__ == "__main__":
